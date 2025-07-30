@@ -1,0 +1,149 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extrahead %}
+<script type="text/javascript">
+    var checkInterval;
+    
+    function checkJobStatus() {
+        fetch('{{ status_url }}')
+            .then(response => response.json())
+            .then(data => {
+                // Update status display
+                document.getElementById('job-status').textContent = data.status;
+                
+                // Update other fields
+                if (data.started_at) {
+                    document.getElementById('started-at').textContent = data.started_at;
+                }
+                if (data.ended_at) {
+                    document.getElementById('ended-at').textContent = data.ended_at;
+                }
+                if (data.duration) {
+                    document.getElementById('duration').textContent = data.duration;
+                }
+                
+                // Update output preview if available
+                if (data.output_preview) {
+                    document.getElementById('output-preview').textContent = data.output_preview;
+                    document.getElementById('output-section').style.display = 'block';
+                }
+                
+                // If job is complete, stop checking and show link to full log
+                if (data.status_code === 'S' || data.status_code === 'F') {
+                    clearInterval(checkInterval);
+                    document.getElementById('view-log-link').style.display = 'inline';
+                    document.getElementById('status-spinner').style.display = 'none';
+                    
+                    // Add color coding for status
+                    if (data.status_code === 'S') {
+                        document.getElementById('job-status').style.color = 'green';
+                    } else {
+                        document.getElementById('job-status').style.color = 'red';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error checking job status:', error);
+                clearInterval(checkInterval);
+                document.getElementById('job-status').textContent = 'Error checking status';
+                document.getElementById('status-spinner').style.display = 'none';
+            });
+    }
+    
+    // Start checking immediately
+    window.addEventListener('DOMContentLoaded', function() {
+        checkJobStatus();
+        // Then check every 2 seconds
+        checkInterval = setInterval(checkJobStatus, 2000);
+    });
+</script>
+<style>
+    .job-info {
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .job-info h2 {
+        margin-top: 0;
+    }
+    .job-info dl {
+        margin: 0;
+    }
+    .job-info dt {
+        font-weight: bold;
+        display: inline-block;
+        width: 120px;
+    }
+    .job-info dd {
+        display: inline;
+        margin: 0;
+    }
+    .job-info dd::after {
+        content: '\A';
+        white-space: pre;
+    }
+    #output-section {
+        margin-top: 20px;
+        display: none;
+    }
+    #output-preview {
+        background-color: #f5f5f5;
+        border: 1px solid #ccc;
+        padding: 10px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    #status-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 10px;
+        vertical-align: middle;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="job-info">
+    <h2>{{ title }}</h2>
+    <dl>
+        <dt>Status:</dt>
+        <dd id="job-status">Checking...</dd>
+        
+        <dt>Started at:</dt>
+        <dd id="started-at">-</dd>
+        
+        <dt>Ended at:</dt>
+        <dd id="ended-at">-</dd>
+        
+        <dt>Duration:</dt>
+        <dd id="duration">-</dd>
+    </dl>
+    
+    <span id="status-spinner"></span>
+    <a id="view-log-link" href="{{ log_url }}" style="display: none;">View full log</a>
+    
+    <div id="output-section">
+        <h3>Output Preview:</h3>
+        <pre id="output-preview"></pre>
+    </div>
+</div>
+
+<div>
+    <a href="{{ logs_list_url }}" class="button">Back to logs list</a>
+</div>
+{% endblock %}
