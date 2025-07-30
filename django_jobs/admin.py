@@ -25,6 +25,7 @@ class CommandScheduleAdmin(admin.ModelAdmin):
     list_display = ('command_name', 'app_name', 'schedule_hour',
                     'schedule_minute', 'schedule_day', 'active', 'view_arguments_btn', 'run_job_btn')
     list_filter = ('app_name', 'active')
+    search_fields = ('command_name', 'app_name')
     list_editable = ('active', 'schedule_hour',
                      'schedule_minute', 'schedule_day')
     actions = ['run_selected_jobs', 'view_command_args', 'sync_jobs']
