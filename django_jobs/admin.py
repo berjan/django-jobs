@@ -1,7 +1,9 @@
 import json
+import threading
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.management import call_command
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
@@ -25,7 +27,7 @@ class CommandScheduleAdmin(admin.ModelAdmin):
     list_filter = ('app_name', 'active')
     list_editable = ('active', 'schedule_hour',
                      'schedule_minute', 'schedule_day')
-    actions = ['run_selected_jobs', 'view_command_args']
+    actions = ['run_selected_jobs', 'view_command_args', 'sync_jobs']
     readonly_fields = ('display_available_arguments',)
     fieldsets = (
         (None, {
@@ -120,16 +122,30 @@ class CommandScheduleAdmin(admin.ModelAdmin):
                 # Run the commands with provided args asynchronously
                 for command in commands:
                     if args:
-                        # Save original args
-                        orig_args = command.arguments
-                        # Set temporary args
-                        command.arguments = args
-                        # Run job asynchronously
-                        log_id = command.run_job_async()
-                        log_ids.append(log_id)
-                        # Restore original args
-                        command.arguments = orig_args
-                        command.save()
+                        # Create log with custom arguments
+                        log = CommandLog(
+                            command_name=command.command_name,
+                            app_name=command.app_name,
+                            arguments=args,
+                        )
+                        log.save()
+                        
+                        # Build command with custom args
+                        temp_command = CommandSchedule(
+                            command_name=command.command_name,
+                            app_name=command.app_name,
+                            arguments=args,
+                        )
+                        # Execute in thread
+                        command_str = CommandSchedule.build_command_string(command.command_name, args)
+                        
+                        thread = threading.Thread(
+                            target=command._execute_command,
+                            args=(command_str, log.pk)
+                        )
+                        thread.daemon = True
+                        thread.start()
+                        log_ids.append(log.pk)
                     else:
                         log_id = command.run_job_async()
                         log_ids.append(log_id)
@@ -248,15 +264,161 @@ class CommandScheduleAdmin(admin.ModelAdmin):
 
         return format_html(html)
     display_available_arguments.short_description = "Available Arguments"
+    
+    def sync_jobs(self, request, queryset):
+        """Sync available commands with database"""
+        try:
+            from io import StringIO
+            import sys
+            
+            # Capture output
+            output = StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = output
+            
+            # Call the sync_jobs command with --create-missing flag
+            result = call_command('sync_jobs', '--create-missing')
+            
+            sys.stdout = old_stdout
+            command_output = output.getvalue()
+            
+            # Parse the output to show a user-friendly message
+            if 'Created' in command_output:
+                # Extract the number of created schedules
+                import re
+                match = re.search(r'Created (\d+) new CommandSchedule entries', command_output)
+                if match:
+                    count = match.group(1)
+                    self.message_user(
+                        request, 
+                        f"Successfully synchronized commands. Created {count} new schedule(s).",
+                        messages.SUCCESS
+                    )
+                else:
+                    self.message_user(request, "Commands synchronized successfully.", messages.SUCCESS)
+            else:
+                self.message_user(request, "All commands already have schedules.", messages.INFO)
+                
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Error synchronizing commands: {str(e)}",
+                messages.ERROR
+            )
+    
+    sync_jobs.short_description = "Sync available commands"
 
 
 class CommandLogAdmin(admin.ModelAdmin):
     list_display = ('command_name', 'app_name',
-                    'status', 'started_at', 'ended_at', 'duration')
+                    'status', 'started_at', 'ended_at', 'duration', 'has_arguments')
     list_filter = ('started_at', 'app_name', 'status',)
     readonly_fields = ('command_name', 'app_name', 'status',
-                       'started_at', 'ended_at', 'duration', 'output')
+                       'started_at', 'ended_at', 'duration', 'display_arguments', 'display_run_again_button', 'output')
     search_fields = ('command_name', 'app_name', 'output')
+    actions = ['run_jobs_manually']
+    
+    fieldsets = (
+        (None, {
+            'fields': ('command_name', 'app_name', 'status')
+        }),
+        ('Execution Details', {
+            'fields': ('started_at', 'ended_at', 'duration', 'display_arguments', 'display_run_again_button')
+        }),
+        ('Output', {
+            'fields': ('output',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_arguments(self, obj):
+        """Show if command had arguments"""
+        return bool(obj.arguments)
+    has_arguments.boolean = True
+    has_arguments.short_description = "Args"
+    
+    def display_arguments(self, obj):
+        """Display arguments in a readable format"""
+        if not obj.arguments:
+            return "No arguments"
+        
+        # Format JSON safely for HTML display
+        json_str = json.dumps(obj.arguments, indent=2)
+        
+        return format_html(
+            '<pre style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin: 0;">{}</pre>',
+            json_str
+        )
+    display_arguments.short_description = "Arguments Used"
+    
+    def display_run_again_button(self, obj):
+        """Display a button to run the command again with the same arguments"""
+        if not obj:
+            return ""
+        
+        # Find or create a CommandSchedule for this command
+        try:
+            schedule = CommandSchedule.objects.get(command_name=obj.command_name)
+        except CommandSchedule.DoesNotExist:
+            # Create a temporary schedule
+            schedule, created = CommandSchedule.objects.get_or_create(
+                command_name=obj.command_name,
+                defaults={
+                    'app_name': obj.app_name,
+                    'active': False,
+                }
+            )
+        
+        # Build URL with pre-filled arguments
+        base_url = reverse('admin:django_jobs_commandschedule_run_with_args')
+        url = f"{base_url}?id={schedule.pk}"
+        
+        # If there are arguments, we need to pass them via session or encode them
+        # For now, we'll create a temporary schedule with the arguments
+        if obj.arguments:
+            # Store the arguments temporarily in the schedule
+            schedule.arguments = obj.arguments
+            schedule.save()
+        
+        return format_html(
+            '<a href="{}" class="button" style="background-color: #417690; color: white; padding: 10px 20px; '
+            'text-decoration: none; display: inline-block; margin: 5px 0;">Run Again with Same Arguments</a>',
+            url
+        )
+    display_run_again_button.short_description = "Actions"
+    
+    def run_jobs_manually(self, request, queryset):
+        """Run commands manually with arguments"""
+        # Get unique command names from the selected logs
+        command_names = list(queryset.values_list('command_name', flat=True).distinct())
+        
+        # Find or create temporary CommandSchedule objects for the run_with_args view
+        schedule_ids = []
+        for command_name in command_names:
+            try:
+                # Try to find existing schedule
+                schedule = CommandSchedule.objects.get(command_name=command_name)
+                schedule_ids.append(str(schedule.pk))
+            except CommandSchedule.DoesNotExist:
+                # Create a temporary schedule for commands that don't have one
+                # We'll use get_or_create to avoid duplicates
+                schedule, created = CommandSchedule.objects.get_or_create(
+                    command_name=command_name,
+                    defaults={
+                        'app_name': queryset.filter(command_name=command_name).first().app_name,
+                        'active': False,  # Keep it inactive
+                    }
+                )
+                schedule_ids.append(str(schedule.pk))
+        
+        # Redirect to the run_with_args view with the schedule IDs
+        base_url = reverse('admin:django_jobs_commandschedule_run_with_args')
+        id_params = '&'.join([f'id={pk}' for pk in schedule_ids])
+        url = f"{base_url}?{id_params}"
+        
+        return HttpResponseRedirect(url)
+    
+    run_jobs_manually.short_description = "Run selected commands manually"
 
     def has_add_permission(self, request):
         return False

@@ -3,3 +3,4 @@ include LICENSE
 recursive-include django_jobs/templates *
 recursive-include django_jobs/static *
 recursive-include django_jobs/migrations *
+prune examples

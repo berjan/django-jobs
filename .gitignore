@@ -52,6 +52,13 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Example project specific
+examples/*/venv/
+examples/*/db.sqlite3
+examples/*/db.sqlite3-journal
+examples/*/__pycache__/
+examples/*/.env
+
 # Environments
 .env
 .venv

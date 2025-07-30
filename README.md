@@ -56,6 +56,19 @@ INSTALLED_APPS = [
 python manage.py migrate django_jobs
 ```
 
+3. (Optional) Configure settings in your `settings.py`:
+
+```python
+# Only include commands from specific apps (if not set, all apps are included)
+DJANGO_JOBS_INCLUDE_APPS = ['example_app', 'myapp']
+
+# Exclude specific commands from being synced
+DJANGO_JOBS_EXCLUDE_COMMANDS = ['migrate', 'runserver', 'makemigrations', 'shell']
+
+# Automatically create schedules when running sync_jobs
+DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
+```
+
 ## Usage
 
 ### Admin Interface
@@ -65,6 +78,7 @@ The app provides an admin interface for:
 - Running commands manually with custom arguments
 - Viewing command execution logs
 - Real-time monitoring of running jobs
+- Syncing available commands using the "Sync available commands" action
 
 ### Management Commands
 
@@ -88,6 +102,70 @@ Example:
 If you're using django-tenants, the app includes commands for tenant-specific execution:
 - `tenant_run_jobs`
 - `tenant_execute_jobs`
+
+## Deployment
+
+To run scheduled jobs in production, you need to execute `run_jobs` periodically. Here are three options:
+
+### Option 1: Crontab (Recommended)
+Add to your crontab (`crontab -e`):
+```bash
+# Run every minute
+* * * * * cd /path/to/project && /path/to/venv/bin/python manage.py run_jobs
+```
+
+### Option 2: Systemd Timer
+Create `/etc/systemd/system/django-jobs.service`:
+```ini
+[Unit]
+Description=Django Jobs Runner
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/project
+ExecStart=/path/to/venv/bin/python manage.py run_jobs
+User=www-data
+```
+
+Create `/etc/systemd/system/django-jobs.timer`:
+```ini
+[Unit]
+Description=Run Django Jobs every minute
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable with:
+```bash
+sudo systemctl enable --now django-jobs.timer
+```
+
+### Option 3: Celery Beat
+If you're already using Celery, create a periodic task that calls the `run_jobs` management command.
+
+## Example Project
+
+Check out the [example project](examples/django-example-app/) to see django-jobs in action. The example demonstrates:
+- Integration with a Django 5 project
+- Sample management commands with various argument types
+- Configuration best practices
+- Admin interface usage
+
+To run the example:
+```bash
+cd examples/django-example-app
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
 
 ## License
 

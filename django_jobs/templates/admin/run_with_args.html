@@ -44,7 +44,143 @@
         font-size: 12px;
         color: #666;
     }
+    
+    /* New styles for argument builder */
+    .argument-builder {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+    }
+    .argument-field {
+        margin-bottom: 1rem;
+    }
+    .argument-field label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 0.25rem;
+    }
+    .argument-field input[type="text"],
+    .argument-field input[type="number"],
+    .argument-field select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        font-size: 0.9rem;
+    }
+    .argument-field .help-text {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    .argument-field .required {
+        color: #dc3545;
+        font-weight: normal;
+    }
+    .toggle-mode {
+        margin: 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .toggle-mode button {
+        padding: 0.5rem 1rem;
+        border: 1px solid #4a90e2;
+        background-color: white;
+        color: #4a90e2;
+        border-radius: 0.25rem;
+        cursor: pointer;
+    }
+    .toggle-mode button.active {
+        background-color: #4a90e2;
+        color: white;
+    }
+    #json-mode {
+        display: none;
+    }
 </style>
+<script>
+function buildJSON() {
+    const args = {};
+    const fields = document.querySelectorAll('.argument-field');
+    
+    fields.forEach(field => {
+        const name = field.dataset.name;
+        const type = field.dataset.type;
+        let value;
+        
+        if (type === 'bool') {
+            const checkbox = field.querySelector('input[type="checkbox"]');
+            value = checkbox.checked;
+        } else {
+            const input = field.querySelector('input, select');
+            value = input.value;
+            
+            // Convert to appropriate type
+            if (value !== '') {
+                if (type === 'int') {
+                    value = parseInt(value);
+                } else if (type === 'float') {
+                    value = parseFloat(value);
+                }
+            } else {
+                // Don't include empty values
+                return;
+            }
+        }
+        
+        args[name] = value;
+    });
+    
+    // Update the JSON field
+    document.getElementById('id_arguments').value = JSON.stringify(args, null, 2);
+}
+
+function toggleMode(mode) {
+    const formMode = document.getElementById('form-mode');
+    const jsonMode = document.getElementById('json-mode');
+    const formButton = document.querySelector('[onclick="toggleMode(\'form\')"]');
+    const jsonButton = document.querySelector('[onclick="toggleMode(\'json\')"]');
+    
+    if (mode === 'form') {
+        formMode.style.display = 'block';
+        jsonMode.style.display = 'none';
+        formButton.classList.add('active');
+        jsonButton.classList.remove('active');
+        buildJSON(); // Update JSON when switching to form mode
+    } else {
+        formMode.style.display = 'none';
+        jsonMode.style.display = 'block';
+        formButton.classList.remove('active');
+        jsonButton.classList.add('active');
+    }
+}
+
+// Initialize form values from JSON when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    const jsonField = document.getElementById('id_arguments');
+    if (jsonField && jsonField.value) {
+        try {
+            const args = JSON.parse(jsonField.value);
+            Object.entries(args).forEach(([name, value]) => {
+                const field = document.querySelector(`[data-name="${name}"]`);
+                if (field) {
+                    const type = field.dataset.type;
+                    if (type === 'bool') {
+                        field.querySelector('input[type="checkbox"]').checked = value;
+                    } else {
+                        field.querySelector('input, select').value = value;
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('Error parsing JSON:', e);
+        }
+    }
+});
+</script>
 {% endblock %}
 
 {% block content %}
@@ -64,49 +200,68 @@
         {% endfor %}
     </div>
     
-    {% if command_args %}
-    <div class="arguments-info">
-        <h2>Available Arguments:</h2>
-        {% for cmd_name, args in command_args.items %}
-            <h3>{{ cmd_name }}</h3>
-            {% if args %}
-                <table class="arguments-table">
-                    <thead>
-                        <tr>
-                            <th>Argument</th>
-                            <th>Description</th>
-                            <th>Required</th>
-                            <th>Default</th>
-                            <th>Type</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+    <div class="argument-builder">
+        <h2>Command Arguments</h2>
+        
+        <div class="toggle-mode">
+            <span>Input Mode:</span>
+            <button type="button" onclick="toggleMode('form')" class="active">Form Builder</button>
+            <button type="button" onclick="toggleMode('json')">JSON Editor</button>
+        </div>
+        
+        <div id="form-mode">
+            {% if command_args %}
+                {% for cmd_name, args in command_args.items %}
+                    {% if commands|length > 1 %}
+                        <h3>{{ cmd_name }}</h3>
+                    {% endif %}
+                    
+                    {% if args %}
                         {% for arg in args %}
-                            {% if arg.error %}
-                                <tr>
-                                    <td colspan="5" style="color: red;">Error: {{ arg.error }}</td>
-                                </tr>
-                            {% else %}
-                                <tr>
-                                    <td><code>{{ arg.name }}</code></td>
-                                    <td>{{ arg.help|default:"-" }}</td>
-                                    <td>{% if arg.required %}Yes{% else %}No{% endif %}</td>
-                                    <td>{{ arg.default|default:"-" }}</td>
-                                    <td>{{ arg.type|default:"-" }}</td>
-                                </tr>
+                            {% if not arg.error and arg.name != 'help' %}
+                                <div class="argument-field" data-name="{{ arg.name }}" data-type="{{ arg.type|default:'str' }}">
+                                    <label>
+                                        {{ arg.name }}
+                                        {% if arg.required %}<span class="required">*</span>{% endif %}
+                                    </label>
+                                    
+                                    {% if arg.type == 'bool' or arg.name == 'store_true' %}
+                                        <input type="checkbox" onchange="buildJSON()">
+                                    {% elif arg.choices %}
+                                        <select onchange="buildJSON()">
+                                            <option value="">---------</option>
+                                            {% for choice in arg.choices %}
+                                                <option value="{{ choice }}">{{ choice }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    {% elif arg.type == 'int' %}
+                                        <input type="number" placeholder="{{ arg.default|default:'' }}" onchange="buildJSON()">
+                                    {% elif arg.type == 'float' %}
+                                        <input type="number" step="any" placeholder="{{ arg.default|default:'' }}" onchange="buildJSON()">
+                                    {% else %}
+                                        <input type="text" placeholder="{{ arg.default|default:'' }}" onchange="buildJSON()">
+                                    {% endif %}
+                                    
+                                    {% if arg.help %}
+                                        <div class="help-text">{{ arg.help }}</div>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                         {% endfor %}
-                    </tbody>
-                </table>
+                    {% else %}
+                        <p style="color: #6c757d;">No arguments available for this command.</p>
+                    {% endif %}
+                {% endfor %}
             {% else %}
-                <p>No arguments available for this command.</p>
+                <p style="color: #6c757d;">No commands selected.</p>
             {% endif %}
-        {% endfor %}
-    </div>
-    {% endif %}
-    
-    <div class="form-row">
-        {{ form.as_p }}
+        </div>
+        
+        <div id="json-mode">
+            <div class="form-row">
+                {{ form.as_p }}
+            </div>
+        </div>
     </div>
     
     <div class="submit-row">

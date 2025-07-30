@@ -1,0 +1,166 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block content %}
+{% if cl.result_count == 0 and not cl.full_result_count %}
+<div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 2rem; margin-bottom: 2rem; text-align: center;">
+    <h2 style="color: #495057; margin-bottom: 1rem;">Welcome to Django Jobs!</h2>
+    
+    <p style="color: #6c757d; margin-bottom: 2rem; font-size: 1.1rem;">
+        No command schedules found. Let's get you started!
+    </p>
+    
+    <div style="margin-bottom: 2rem;">
+        <form method="post" action="{% url 'admin:django_jobs_commandschedule_changelist' %}" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="sync_jobs">
+            <input type="hidden" name="_selected_action" value="0">
+            <button type="submit" class="button default" style="background-color: #28a745; color: white; padding: 10px 20px; font-size: 1rem; border: none; border-radius: 4px; cursor: pointer;">
+                Sync Available Commands
+            </button>
+        </form>
+    </div>
+    
+    <div style="text-align: left; max-width: 800px; margin: 2rem auto; background-color: white; padding: 2rem; border-radius: 0.25rem; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);">
+        <h3 style="color: #343a40; margin-bottom: 1rem;">Configuration Options</h3>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="color: #495057; margin-bottom: 0.5rem;">Auto-sync Management Commands</h4>
+            <p style="color: #6c757d; margin-bottom: 0.5rem;">
+                Add these settings to your <code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px;">settings.py</code> to automatically create schedules:
+            </p>
+            <pre style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.25rem; overflow-x: auto;">
+# Automatically create schedules when running sync_jobs
+DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
+
+# Only include commands from specific apps (optional)
+DJANGO_JOBS_INCLUDE_APPS = ['myapp', 'anotherapp']
+
+# Exclude specific commands (optional)
+DJANGO_JOBS_EXCLUDE_COMMANDS = ['migrate', 'runserver', 'makemigrations']</pre>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="color: #495057; margin-bottom: 0.5rem;">How It Works</h4>
+            <ul style="color: #6c757d; padding-left: 1.5rem;">
+                <li style="margin-bottom: 0.5rem;">The sync process discovers all Django management commands in your project</li>
+                <li style="margin-bottom: 0.5rem;">If <code>DJANGO_JOBS_INCLUDE_APPS</code> is set, only commands from those apps will be included</li>
+                <li style="margin-bottom: 0.5rem;">Commands listed in <code>DJANGO_JOBS_EXCLUDE_COMMANDS</code> will always be excluded</li>
+                <li style="margin-bottom: 0.5rem;">New schedules are created as inactive by default - enable them as needed</li>
+            </ul>
+        </div>
+        
+        <div>
+            <h4 style="color: #495057; margin-bottom: 0.5rem;">Example Configuration</h4>
+            <pre style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.25rem; overflow-x: auto;">
+# settings.py
+DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
+DJANGO_JOBS_INCLUDE_APPS = ['myapp', 'django_jobs']
+DJANGO_JOBS_EXCLUDE_COMMANDS = [
+    'migrate', 'runserver', 'makemigrations', 'shell',
+    'createsuperuser', 'test', 'startapp', 'startproject'
+]</pre>
+        </div>
+    </div>
+</div>
+{% else %}
+<!-- Always show help panel for non-empty list -->
+<div style="background-color: #f0f8ff; border: 1px solid #4a90e2; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 4rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: #2c3e50;">Django Jobs Quick Guide</h3>
+        <div>
+            <button onclick="toggleSection('sync-section')" style="margin-right: 0.5rem; padding: 0.5rem 1rem; background-color: #4a90e2; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                Sync Commands
+            </button>
+            <button onclick="toggleSection('config-section')" style="margin-right: 0.5rem; padding: 0.5rem 1rem; background-color: #5cb85c; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                Configuration
+            </button>
+            <button onclick="toggleSection('deployment-section')" style="padding: 0.5rem 1rem; background-color: #f0ad4e; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                Deployment
+            </button>
+        </div>
+    </div>
+    
+    <!-- Sync Section -->
+    <div id="sync-section" style="display: none; margin-top: 1rem; padding: 1rem; background-color: white; border-radius: 0.25rem;">
+        <h4 style="color: #4a90e2; margin-bottom: 0.5rem;">Syncing Management Commands</h4>
+        <p style="margin-bottom: 0.5rem;">To sync new commands: Select any schedule → Actions → "Sync available commands"</p>
+        <p style="margin: 0;">Or run from command line: <code style="background-color: #f8f9fa; padding: 2px 4px;">python manage.py sync_jobs --create-missing</code></p>
+    </div>
+    
+    <!-- Configuration Section -->
+    <div id="config-section" style="display: none; margin-top: 1rem; padding: 1rem; background-color: white; border-radius: 0.25rem;">
+        <h4 style="color: #5cb85c; margin-bottom: 0.5rem;">Settings Configuration</h4>
+        <pre style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.25rem; margin: 0; overflow-x: auto;">
+# settings.py
+
+# Automatically create schedules when syncing
+DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
+
+# Only include commands from specific apps
+DJANGO_JOBS_INCLUDE_APPS = ['myapp', 'anotherapp']
+
+# Exclude specific commands
+DJANGO_JOBS_EXCLUDE_COMMANDS = [
+    'migrate', 'runserver', 'makemigrations',
+    'shell', 'test', 'createsuperuser'
+]</pre>
+    </div>
+    
+    <!-- Deployment Section -->
+    <div id="deployment-section" style="display: none; margin-top: 1rem; padding: 1rem; background-color: white; border-radius: 0.25rem;">
+        <h4 style="color: #f0ad4e; margin-bottom: 0.5rem;">Running Jobs in Production</h4>
+        
+        <h5 style="margin-top: 1rem; margin-bottom: 0.5rem;">Option 1: Crontab (Recommended)</h5>
+        <p style="margin-bottom: 0.5rem;">Add to your crontab (<code>crontab -e</code>):</p>
+        <pre style="background-color: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 1rem; overflow-x: auto;">
+# Run Django Jobs scheduler every minute
+* * * * * cd /path/to/project && /path/to/venv/bin/python manage.py run_jobs</pre>
+        
+        <h5 style="margin-bottom: 0.5rem;">Option 2: Systemd Timer</h5>
+        <p style="margin-bottom: 0.5rem;">Create <code>/etc/systemd/system/django-jobs.service</code>:</p>
+        <pre style="background-color: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 1rem; overflow-x: auto;">
+[Unit]
+Description=Django Jobs Runner
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/project
+ExecStart=/path/to/venv/bin/python manage.py run_jobs
+User=www-data</pre>
+        
+        <p style="margin-bottom: 0.5rem;">Create <code>/etc/systemd/system/django-jobs.timer</code>:</p>
+        <pre style="background-color: #f8f9fa; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 1rem; overflow-x: auto;">
+[Unit]
+Description=Run Django Jobs every minute
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+
+[Install]
+WantedBy=timers.target</pre>
+        
+        <p style="margin: 0;">Enable with: <code>systemctl enable --now django-jobs.timer</code></p>
+        
+        <h5 style="margin-top: 1rem; margin-bottom: 0.5rem;">Option 3: Celery Beat (if using Celery)</h5>
+        <p style="margin: 0;">Create a periodic task that runs <code>run_jobs</code> command every minute.</p>
+    </div>
+</div>
+
+<script>
+function toggleSection(sectionId) {
+    // Hide all sections
+    document.getElementById('sync-section').style.display = 'none';
+    document.getElementById('config-section').style.display = 'none';
+    document.getElementById('deployment-section').style.display = 'none';
+    
+    // Toggle the selected section
+    var section = document.getElementById(sectionId);
+    section.style.display = section.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+
+{{ block.super }}
+{% endif %}
+{% endblock %}

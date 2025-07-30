@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import shlex
@@ -37,6 +38,29 @@ class CommandSchedule(models.Model):
     class Meta:
         verbose_name = "Command Schedule"
         verbose_name_plural = "Command Schedules"
+    
+    @staticmethod
+    def build_command_string(command_name, arguments=None):
+        """Build a command string with properly escaped arguments"""
+        command = f'python manage.py {command_name}'
+        
+        if arguments:
+            args_list = []
+            for key, value in arguments.items():
+                # Convert underscores to hyphens for command-line compatibility
+                arg_name = key.replace('_', '-')
+                if value is True:
+                    # Handle boolean flags (just the flag, no value)
+                    args_list.append(f'--{arg_name}')
+                elif value is not False:  # Don't add if False
+                    # Handle all other arguments
+                    # Use shlex.quote to properly escape the value
+                    args_list.append(f'--{arg_name}={shlex.quote(str(value))}')
+            
+            if args_list:
+                command += ' ' + ' '.join(args_list)
+        
+        return command
 
     @staticmethod
     def run_jobs(queryset):
@@ -176,29 +200,16 @@ class CommandSchedule(models.Model):
         log = CommandLog(
             command_name=self.command_name,
             app_name=self.app_name,
+            arguments=self.arguments,
         )
         log.save()
 
         try:
-            # Start with the base command
-            command = f'python manage.py {self.command_name}'
-
-            # Add arguments from JSON field
-            if self.arguments:
-                args_list = []
-                for key, value in self.arguments.items():
-                    if value is True:
-                        # Handle boolean flags (just the flag, no value)
-                        args_list.append(f'--{key}')
-                    elif value is not False:  # Don't add if False
-                        # Handle all other arguments
-                        args_list.append(f'--{key}={value}')
-
-                if args_list:
-                    command += ' ' + ' '.join(args_list)
+            # Build the command string using the utility method
+            command = self.build_command_string(self.command_name, self.arguments)
 
             result = subprocess.run(
-                command.split(),
+                shlex.split(command),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
@@ -220,25 +231,12 @@ class CommandSchedule(models.Model):
         log = CommandLog(
             command_name=self.command_name,
             app_name=self.app_name,
+            arguments=self.arguments,
         )
         log.save()
 
-        # Build the command
-        command = f'python manage.py {self.command_name}'
-
-        # Add arguments from JSON field
-        if self.arguments:
-            args_list = []
-            for key, value in self.arguments.items():
-                if value is True:
-                    # Handle boolean flags
-                    args_list.append(f'--{key}')
-                elif value is not False:  # Don't add if False
-                    # Handle all other arguments
-                    args_list.append(f'--{key}={value}')
-
-            if args_list:
-                command += ' ' + ' '.join(args_list)
+        # Build the command string using the utility method
+        command = self.build_command_string(self.command_name, self.arguments)
 
         # Start a new thread to execute the command
         thread = threading.Thread(
@@ -275,6 +273,12 @@ class CommandSchedule(models.Model):
                     # Add type information if available
                     if hasattr(action, 'type') and action.type:
                         arg_info['type'] = action.type.__name__
+                    elif isinstance(action, argparse._StoreTrueAction):
+                        arg_info['type'] = 'bool'
+                        arg_info['default'] = False
+                    elif isinstance(action, argparse._StoreFalseAction):
+                        arg_info['type'] = 'bool'
+                        arg_info['default'] = True
 
                     # Add choices if available
                     if hasattr(action, 'choices') and action.choices:
@@ -305,6 +309,8 @@ class CommandLog(models.Model):
 
     command_name = models.CharField(max_length=255)
     app_name = models.CharField(max_length=255, null=True, blank=True)
+    arguments = models.JSONField(default=dict, blank=True, 
+                                 help_text='Arguments used when running the command')
     started_at = models.DateTimeField(default=timezone.now)
     ended_at = models.DateTimeField(null=True, blank=True)
     duration = models.DurationField(null=True, blank=True)

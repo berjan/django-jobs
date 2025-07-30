@@ -84,3 +84,23 @@ To use django-jobs in a Django project:
 2. Include django_jobs URLs if using custom views
 3. Run migrations to create database tables
 4. Configure scheduled jobs via Django admin
+
+## Configuration Settings
+
+Add these optional settings to your Django settings.py:
+
+```python
+# Only include commands from specific apps
+DJANGO_JOBS_INCLUDE_APPS = ['example_app', 'myapp']
+
+# Exclude specific commands from being synced
+DJANGO_JOBS_EXCLUDE_COMMANDS = ['migrate', 'runserver', 'makemigrations']
+
+# Automatically create schedules when running sync_jobs
+DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
+```
+
+### Admin Features
+
+- **Sync Jobs Action**: In the admin interface, select any schedule and use the "Sync available commands" action to automatically create schedules for new commands
+- The sync process respects the settings above to filter which commands are included
