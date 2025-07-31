@@ -82,6 +82,25 @@ class CommandScheduleTestCase(TestCase):
         # Should be able to get next run times
         next_run = cron.get_next()
         self.assertIsNotNone(next_run)
+    
+    def test_run_jobs_command(self):
+        """Test that run_jobs command works without errors"""
+        from django.core.management import call_command
+        from io import StringIO
+        
+        # Create a schedule with cron interval
+        CommandSchedule.objects.create(
+            command_name='test_run_jobs',
+            active=True,
+            schedule_minute='*/15',
+            schedule_hour='*',
+            schedule_day='*'
+        )
+        
+        # Should not raise AttributeError about timestamp()
+        out = StringIO()
+        call_command('run_jobs', stdout=out)
+        # Command should complete without error
 
 
 class CommandLogTestCase(TestCase):

@@ -22,7 +22,7 @@ class Command(BaseCommand):
             next_run = cron.get_next()
             
             # If the previous run time is within the last minute, execute the job
-            if now.timestamp() - previous_run.timestamp() < 60:
+            if now.timestamp() - previous_run < 60:
                 self.stdout.write(self.style.SUCCESS(f"Running command '{command_name}' at {now}"))
                 log_id = command_schedule.run_job()
                 self.stdout.write(f"Job started with log ID: {log_id}")
