@@ -10,8 +10,10 @@ from datetime import datetime
 from io import StringIO
 
 from django.core.management import get_commands, load_command_class
+from django.core.exceptions import ValidationError
 from django.db import connection, models
 from django.utils import timezone
+from croniter import croniter
 
 # Extract the available management commands
 COMMAND_CHOICES = sorted([(command, command)
@@ -26,11 +28,11 @@ class CommandSchedule(models.Model):
     )
     app_name = models.CharField(max_length=255, null=True, blank=True)
     schedule_hour = models.CharField(
-        max_length=5, default='*', help_text='Use * for every hour')
+        max_length=20, default='*', help_text='Cron expression for hour: * for every hour, */2 for every 2 hours, 0-23 for specific hour, 9-17 for range')
     schedule_minute = models.CharField(
-        max_length=5, default='*', help_text='Use * for every minute')
+        max_length=20, default='*', help_text='Cron expression for minute: * for every minute, */15 for every 15 minutes, 0-59 for specific minute, 0,30 for multiple values')
     schedule_day = models.CharField(
-        max_length=5, default='*', help_text='Use * for every day')
+        max_length=20, default='*', help_text='Cron expression for day: * for every day, */7 for every 7 days, 1-31 for specific day, 1,15 for multiple values')
     active = models.BooleanField(default=False)
     arguments = models.JSONField(default=dict, blank=True,
                                  help_text='JSON dictionary of arguments to pass to the command')
@@ -38,6 +40,21 @@ class CommandSchedule(models.Model):
     class Meta:
         verbose_name = "Command Schedule"
         verbose_name_plural = "Command Schedules"
+    
+    def clean(self):
+        """Validate cron expressions"""
+        super().clean()
+        try:
+            # Build full cron expression to validate
+            cron_expression = f"{self.schedule_minute} {self.schedule_hour} {self.schedule_day} * *"
+            croniter(cron_expression)
+        except Exception as e:
+            raise ValidationError(f"Invalid cron expression: {e}")
+    
+    def save(self, *args, **kwargs):
+        """Run validation before saving"""
+        self.clean()
+        super().save(*args, **kwargs)
     
     @staticmethod
     def build_command_string(command_name, arguments=None):

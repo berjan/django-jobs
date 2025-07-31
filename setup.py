@@ -31,6 +31,7 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "Django>=3.2",
+        "croniter>=6.0.0",
     ],
     include_package_data=True,
     package_data={
