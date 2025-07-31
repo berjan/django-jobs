@@ -59,6 +59,17 @@ class CommandScheduleAdmin(admin.ModelAdmin):
         )
     run_job_btn.short_description = "Run"
 
+    def changelist_view(self, request, extra_context=None):
+        """Override changelist view to set default filter for active=True"""
+        # Check if no filters are currently applied
+        if not request.GET:
+            # Set default filter to active=True
+            q = request.GET.copy()
+            q['active__exact'] = '1'
+            request.GET = q
+            request.META['QUERY_STRING'] = request.GET.urlencode()
+        return super().changelist_view(request, extra_context=extra_context)
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
