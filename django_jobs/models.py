@@ -35,7 +35,7 @@ class CommandSchedule(models.Model):
         max_length=20, default='*', help_text='Cron expression for day: * for every day, */7 for every 7 days, 1-31 for specific day, 1,15 for multiple values')
     active = models.BooleanField(default=False)
     arguments = models.JSONField(default=dict, blank=True,
-                                 help_text='JSON dictionary of arguments to pass to the command')
+                                 help_text='JSON dictionary of arguments. Use "_positional": ["arg1", "arg2"] for positional args')
 
     class Meta:
         verbose_name = "Command Schedule"
@@ -58,24 +58,63 @@ class CommandSchedule(models.Model):
     
     @staticmethod
     def build_command_string(command_name, arguments=None):
-        """Build a command string with properly escaped arguments"""
+        """Build a command string with properly escaped arguments
+        
+        Supports:
+        - Positional arguments via special key '_positional' or '_args'
+        - Keyword arguments (default behavior)
+        - Mixed mode with both positional and keyword arguments
+        
+        Example:
+        {
+            "_positional": ["BTC/USDT", "1m"],
+            "dry_run": true,
+            "exchange": "mexc"
+        }
+        """
         command = f'python manage.py {command_name}'
         
         if arguments:
-            args_list = []
+            positional_args = []
+            keyword_args = []
+            
+            # Extract positional arguments if present
+            if '_positional' in arguments:
+                positional = arguments.get('_positional', [])
+                if isinstance(positional, list):
+                    positional_args = [shlex.quote(str(arg)) for arg in positional]
+                else:
+                    # Single positional argument
+                    positional_args = [shlex.quote(str(positional))]
+            elif '_args' in arguments:
+                # Alternative key for positional arguments
+                positional = arguments.get('_args', [])
+                if isinstance(positional, list):
+                    positional_args = [shlex.quote(str(arg)) for arg in positional]
+                else:
+                    positional_args = [shlex.quote(str(positional))]
+            
+            # Process keyword arguments
             for key, value in arguments.items():
+                # Skip special keys
+                if key in ('_positional', '_args'):
+                    continue
+                    
                 # Convert underscores to hyphens for command-line compatibility
                 arg_name = key.replace('_', '-')
                 if value is True:
                     # Handle boolean flags (just the flag, no value)
-                    args_list.append(f'--{arg_name}')
+                    keyword_args.append(f'--{arg_name}')
                 elif value is not False:  # Don't add if False
                     # Handle all other arguments
                     # Use shlex.quote to properly escape the value
-                    args_list.append(f'--{arg_name}={shlex.quote(str(value))}')
+                    keyword_args.append(f'--{arg_name}={shlex.quote(str(value))}')
             
-            if args_list:
-                command += ' ' + ' '.join(args_list)
+            # Build final command with positional args first, then keyword args
+            if positional_args:
+                command += ' ' + ' '.join(positional_args)
+            if keyword_args:
+                command += ' ' + ' '.join(keyword_args)
         
         return command
 

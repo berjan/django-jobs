@@ -17,7 +17,7 @@ class CommandArgsForm(forms.Form):
     arguments = forms.JSONField(
         required=False,
         widget=forms.Textarea(attrs={'rows': 5, 'cols': 80}),
-        help_text='Enter arguments as JSON: {"arg1": "value1", "arg2": true}'
+        help_text='Enter arguments as JSON. For positional args use "_positional": ["arg1", "arg2"] or mix with keyword args: {"_positional": ["BTC/USDT", "1m"], "dry_run": true}'
     )
 
 

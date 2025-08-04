@@ -7,7 +7,7 @@ A reusable Django app for managing and scheduling management commands.
 - Schedule Django management commands to run at specific times
 - Track command execution history and output
 - Admin interface for managing scheduled jobs
-- Support for command arguments
+- Support for both positional and keyword command arguments
 - Real-time output streaming for long-running commands
 - Multi-tenant support (optional)
 
@@ -96,6 +96,28 @@ Jobs can be scheduled using cron-like syntax:
 Example:
 - Hour: `14`, Minute: `30`, Day: `*` = Run at 2:30 PM every day
 - Hour: `*`, Minute: `0`, Day: `*` = Run every hour on the hour
+
+### Command Arguments
+
+Django Jobs supports both positional and keyword arguments:
+
+**Positional Arguments**:
+```json
+{
+  "_positional": ["arg1", "arg2"],
+  "flag": true
+}
+```
+Generates: `python manage.py command arg1 arg2 --flag`
+
+**Keyword Arguments** (traditional):
+```json
+{
+  "option1": "value1",
+  "option2": "value2"
+}
+```
+Generates: `python manage.py command --option1=value1 --option2=value2`
 
 ## Multi-tenant Support
 

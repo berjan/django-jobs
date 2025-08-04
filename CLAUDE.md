@@ -46,6 +46,8 @@ python setup.py sdist bdist_wheel
 **CommandSchedule**: Stores scheduled commands with cron-like scheduling
 - Uses `schedule_hour`, `schedule_minute`, `schedule_day` fields (use '*' for "every")
 - `arguments` field stores JSON dict of command arguments
+  - Supports positional arguments via `_positional` or `_args` key
+  - Example: `{"_positional": ["BTC/USDT", "1m"], "dry_run": true}`
 - `run_job()` - Synchronous execution
 - `run_job_async()` - Asynchronous execution in separate thread with real-time output streaming
 
@@ -104,3 +106,25 @@ DJANGO_JOBS_AUTO_CREATE_SCHEDULES = True
 
 - **Sync Jobs Action**: In the admin interface, select any schedule and use the "Sync available commands" action to automatically create schedules for new commands
 - The sync process respects the settings above to filter which commands are included
+
+### Enhanced Argument Handling
+
+Django Jobs now supports both positional and keyword arguments for management commands:
+
+**Positional Arguments**: Use `_positional` or `_args` key in the JSON arguments
+```json
+{
+  "_positional": ["BTC/USDT", "1m"],
+  "calculate_indicators": true
+}
+```
+This generates: `python manage.py fetch_latest_candles BTC/USDT 1m --calculate-indicators`
+
+**Backward Compatibility**: Existing keyword-only arguments continue to work as before
+```json
+{
+  "symbol": "BTC/USDT",
+  "timeframe": "1m"
+}
+```
+This generates: `python manage.py fetch_latest_candles --symbol=BTC/USDT --timeframe=1m`
